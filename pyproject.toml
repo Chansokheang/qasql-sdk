@@ -1,0 +1,85 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qasql"
+version = "1.0.0"
+description = "Local-first Text-to-SQL engine for enterprise deployment"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "QA-SQL Team", email = "qasql@example.com"}
+]
+keywords = [
+    "text-to-sql",
+    "natural-language",
+    "sql",
+    "database",
+    "llm",
+    "enterprise",
+    "local",
+    "ollama"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Database",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "requests>=2.28.0",
+]
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.18.0"]
+openai = ["openai>=1.0.0"]
+postgres = ["psycopg2-binary>=2.9.0"]
+all = [
+    "anthropic>=0.18.0",
+    "openai>=1.0.0",
+    "psycopg2-binary>=2.9.0",
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+qasql = "qasql.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/your-org/qasql"
+Documentation = "https://github.com/your-org/qasql#readme"
+Repository = "https://github.com/your-org/qasql"
+Issues = "https://github.com/your-org/qasql/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["qasql*"]
+
+[tool.setuptools.package-data]
+qasql = ["py.typed"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
