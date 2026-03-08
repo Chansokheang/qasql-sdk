@@ -14,6 +14,7 @@ All processing happens locally - sensitive database schemas never leave your net
 - [Features](#features)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Terminal UI](#terminal-ui)
 - [CLI Usage](#cli-usage)
 - [Python SDK](#python-sdk)
 - [Configuration](#configuration)
@@ -51,6 +52,9 @@ pip install qasql
 ### Step 2: Install Optional Dependencies
 
 ```bash
+# For Terminal UI (recommended)
+pip install qasql[ui]
+
 # For Anthropic Claude
 pip install qasql[anthropic]
 
@@ -122,6 +126,98 @@ python test_california_schools.py
 cd qasql-sdk/examples
 python interactive_demo.py --db-uri sqlite:///../../app/california_schools.sqlite
 ```
+
+---
+
+## Terminal UI
+
+Interactive terminal interface similar to Claude Code.
+
+### Install with UI Support
+
+```bash
+pip install qasql[ui]
+```
+
+### Launch Terminal UI
+
+```bash
+# Start UI (configure LLM and database interactively)
+python -m qasql.tui
+
+# Or connect to database on startup
+python -m qasql.tui --db ./database.sqlite
+
+# With different LLM providers
+python -m qasql.tui --provider ollama --model llama3.2:3b
+python -m qasql.tui --provider anthropic --api-key sk-ant-xxx
+python -m qasql.tui --provider openai --api-key sk-xxx
+
+# Use remote Ollama server
+python -m qasql.tui --base-url http://192.168.1.100:11434
+```
+
+### Terminal UI Preview
+
+```
+╔═══════════════════════════════════════════════════════════════╗
+║   ██████╗  █████╗ ███████╗ ██████╗ ██╗                       ║
+║  ██╔═══██╗██╔══██╗██╔════╝██╔═══██╗██║                       ║
+║  ██║   ██║███████║███████╗██║   ██║██║                       ║
+║  ╚██████╔╝██║  ██║███████║╚██████╔╝███████╗                  ║
+║   Text-to-SQL Engine - Local & Private                       ║
+╚═══════════════════════════════════════════════════════════════╝
+
+qasql> /db ./california_schools.sqlite
+✓ Connected to: california_schools (3 tables)
+
+qasql> How many schools are there?
+┌─────────────────────────────────────────┐
+│ Generated SQL (confidence: 85%)         │
+├─────────────────────────────────────────┤
+│ SELECT COUNT(*) FROM schools;           │
+└─────────────────────────────────────────┘
+```
+
+### Terminal UI Commands
+
+**Connection Commands:**
+| Command | Description |
+|---------|-------------|
+| `/llm` | Show current LLM configuration |
+| `/llm ollama [model]` | Use local Ollama |
+| `/llm ollama [model] [url]` | Use Ollama at custom URL |
+| `/llm anthropic [api_key]` | Use Claude API |
+| `/llm openai [api_key]` | Use OpenAI API |
+| `/db` | Show current database |
+| `/db <path_or_uri>` | Connect to database |
+
+**Query Commands:**
+| Command | Description |
+|---------|-------------|
+| `/tables` | List all tables |
+| `/schema <table>` | Show table schema |
+| `/hint <text>` | Set hint for next query |
+| `/sql <query>` | Execute raw SQL |
+| `/history` | Show query history |
+
+**Other Commands:**
+| Command | Description |
+|---------|-------------|
+| `/status` | Show current configuration |
+| `/clear` | Clear screen |
+| `/help` | Show help |
+| `/quit` | Exit |
+
+Or just type a natural language question to generate SQL!
+
+### Database Connection Formats
+
+| Type | Example |
+|------|---------|
+| SQLite (file path) | `/db ./database.sqlite` |
+| SQLite (URI) | `/db sqlite:///path/to/db.sqlite` |
+| PostgreSQL | `/db postgresql://user:pass@localhost:5432/dbname` |
 
 ---
 
@@ -595,5 +691,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Support
 
-- Issues: [GitHub Issues](https://github.com/your-org/qasql/issues)
-- Documentation: [GitHub Wiki](https://github.com/your-org/qasql/wiki)
+- Issues: [GitHub Issues](https://github.com/Chansokheang/Map-Reduce-Schema-sdk/issues)
+- Documentation: [GitHub](https://github.com/Chansokheang/Map-Reduce-Schema-sdk)
+- PyPI: [pypi.org/project/qasql](https://pypi.org/project/qasql/)

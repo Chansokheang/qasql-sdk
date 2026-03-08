@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qasql"
-version = "1.0.0"
+version = "1.0.4"
 description = "Local-first Text-to-SQL engine for enterprise deployment"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 requires-python = ">=3.10"
 authors = [
-    {name = "QA-SQL Team", email = "qasql@example.com"}
+    {name = "Chansokheang", email = "heangs770@gmail.com"}
 ]
 keywords = [
     "text-to-sql",
@@ -25,7 +25,6 @@ keywords = [
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -43,10 +42,12 @@ dependencies = [
 anthropic = ["anthropic>=0.18.0"]
 openai = ["openai>=1.0.0"]
 postgres = ["psycopg2-binary>=2.9.0"]
+ui = ["rich>=13.0.0"]
 all = [
     "anthropic>=0.18.0",
     "openai>=1.0.0",
     "psycopg2-binary>=2.9.0",
+    "rich>=13.0.0",
 ]
 dev = [
     "pytest>=7.0.0",
@@ -57,12 +58,13 @@ dev = [
 
 [project.scripts]
 qasql = "qasql.cli:main"
+qasql-ui = "qasql.tui:main"
 
 [project.urls]
-Homepage = "https://github.com/your-org/qasql"
-Documentation = "https://github.com/your-org/qasql#readme"
-Repository = "https://github.com/your-org/qasql"
-Issues = "https://github.com/your-org/qasql/issues"
+Homepage = "https://github.com/Chansokheang/Map-Reduce-Schema-sdk"
+Documentation = "https://github.com/Chansokheang/Map-Reduce-Schema-sdk#readme"
+Repository = "https://github.com/Chansokheang/Map-Reduce-Schema-sdk"
+Issues = "https://github.com/Chansokheang/Map-Reduce-Schema-sdk/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -32,8 +32,8 @@ from qasql.config import QASQLConfig
 from qasql.result import QueryResult, SetupResult
 from qasql.database import DatabaseConnector
 
-__version__ = "1.0.0"
-__author__ = "QA-SQL Team"
+__version__ = "1.0.4"
+__author__ = "Chansokheang"
 
 __all__ = [
     "QASQLEngine",
@@ -43,3 +43,13 @@ __all__ = [
     "DatabaseConnector",
     "__version__",
 ]
+
+# Optional TUI import
+def run_ui(db_uri: str = None, model: str = "llama3.2:3b"):
+    """Launch the interactive Terminal UI."""
+    try:
+        from qasql.tui import TerminalUI
+        tui = TerminalUI()
+        tui.run(db_uri=db_uri, model=model)
+    except ImportError:
+        print("TUI requires 'rich' library. Install with: pip install qasql[ui]")
