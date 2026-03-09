@@ -1,0 +1,100 @@
+{
+  "tables": {
+    "herb5_bulk": {
+      "columns": [
+        {
+          "name": "item_name",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "grade",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null,
+          "distinct_values": [
+            "10cm",
+            "21cm",
+            "30cm",
+            "18cm",
+            "특대",
+            "15cm",
+            "24cm"
+          ]
+        },
+        {
+          "name": "zone",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null,
+          "distinct_values": [
+            "10동",
+            "자스민",
+            "곤지암",
+            "9연동",
+            "평창",
+            "대관령",
+            "서울"
+          ]
+        },
+        {
+          "name": "unit",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null,
+          "distinct_values": [
+            "개"
+          ]
+        },
+        {
+          "name": "current_stock",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "primary_keys": [],
+      "foreign_keys": [],
+      "row_count": 2366,
+      "sample_rows": [
+        [
+          "가물레피시스(유리호프스)",
+          "10cm",
+          "서울",
+          "개",
+          0
+        ],
+        [
+          "가물레피시스(유리호프스)",
+          "10cm",
+          "10동",
+          "개",
+          0
+        ],
+        [
+          "가물레피시스(유리호프스)",
+          "10cm",
+          "자스민",
+          "개",
+          0
+        ],
+        [
+          "가물레피시스(유리호프스)",
+          "10cm",
+          "9연동",
+          "개",
+          0
+        ],
+        [
+          "가물레피시스(유리호프스)",
+          "10cm",
+          "곤지암",
+          "개",
+          0
+        ]
+      ]
+    }
+  },
+  "database": "herb5"
+}

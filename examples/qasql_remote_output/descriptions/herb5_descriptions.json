@@ -1,0 +1,61 @@
+{
+  "tables": {
+    "herb5_bulk": {
+      "table_readable_name": "herb5_bulk",
+      "columns": [
+        {
+          "name": "item_name",
+          "readable_name": "item_name",
+          "type": "TEXT",
+          "description": "The item_name field"
+        },
+        {
+          "name": "grade",
+          "readable_name": "grade",
+          "type": "TEXT",
+          "description": "The grade field",
+          "distinct_values": [
+            "10cm",
+            "21cm",
+            "30cm",
+            "18cm",
+            "특대",
+            "15cm",
+            "24cm"
+          ]
+        },
+        {
+          "name": "zone",
+          "readable_name": "zone",
+          "type": "TEXT",
+          "description": "The zone field",
+          "distinct_values": [
+            "10동",
+            "자스민",
+            "곤지암",
+            "9연동",
+            "평창",
+            "대관령",
+            "서울"
+          ]
+        },
+        {
+          "name": "unit",
+          "readable_name": "unit",
+          "type": "TEXT",
+          "description": "The unit field",
+          "distinct_values": [
+            "개"
+          ]
+        },
+        {
+          "name": "current_stock",
+          "readable_name": "current_stock",
+          "type": "INTEGER",
+          "description": "The current_stock field"
+        }
+      ]
+    }
+  },
+  "database": "herb5"
+}
