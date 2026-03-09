@@ -17,13 +17,17 @@ class QASQLConfig:
     Configuration for QA-SQL Engine.
 
     Attributes:
-        db_type: Database type ("sqlite" or "postgresql")
+        db_type: Database type ("sqlite", "postgresql", or "supabase")
         db_uri: Database connection URI or file path
         db_host: PostgreSQL host
         db_port: PostgreSQL port
         db_name: Database name (for PostgreSQL)
         db_user: Database username
         db_password: Database password
+        db_sslmode: SSL mode for PostgreSQL (disable, allow, prefer, require, verify-ca, verify-full)
+        db_schema: PostgreSQL schema name (default: "public")
+        supabase_url: Supabase project URL (e.g., https://xxx.supabase.co)
+        supabase_key: Supabase API key (anon or service_role)
         llm_provider: LLM provider ("ollama", "anthropic", "openai")
         llm_model: Model name
         llm_base_url: Base URL for Ollama server
@@ -35,13 +39,19 @@ class QASQLConfig:
     """
 
     # Database settings
-    db_type: Literal["sqlite", "postgresql"] = "sqlite"
+    db_type: Literal["sqlite", "postgresql", "supabase"] = "sqlite"
     db_uri: str = ""
     db_host: str = "localhost"
     db_port: int = 5432
     db_name: str = ""
     db_user: str = ""
     db_password: str = ""
+    db_sslmode: str = "prefer"  # disable, allow, prefer, require, verify-ca, verify-full
+    db_schema: str = "public"  # PostgreSQL schema
+
+    # Supabase settings
+    supabase_url: str = ""  # e.g., https://xxx.supabase.co
+    supabase_key: str = ""  # anon key or service_role key
 
     # LLM settings (local by default)
     llm_provider: Literal["ollama", "anthropic", "openai"] = "ollama"
@@ -121,12 +131,32 @@ class QASQLConfig:
             "database": self.db_name,
             "user": self.db_user,
             "password": self.db_password,
+            "sslmode": self.db_sslmode,
+            "schema": self.db_schema,
+        }
+
+    def get_supabase_params(self) -> dict:
+        """Get Supabase connection parameters."""
+        if self.db_type != "supabase":
+            raise ValueError("get_supabase_params() only valid for Supabase")
+        return {
+            "url": self.supabase_url,
+            "key": self.supabase_key,
+            "schema": self.db_schema,
         }
 
     def get_database_name(self) -> str:
         """Extract database name from configuration."""
         if self.db_type == "sqlite":
             return Path(self.db_uri).stem
+        elif self.db_type == "supabase":
+            # Extract project name from Supabase URL
+            if self.supabase_url:
+                import re
+                match = re.search(r"https://([^.]+)", self.supabase_url)
+                if match:
+                    return match.group(1)
+            return "supabase"
         return self.db_name
 
     @classmethod
@@ -139,9 +169,21 @@ class QASQLConfig:
 
         if "database" in data:
             db = data["database"]
-            for key in ["uri", "type", "host", "port", "name", "user", "password"]:
+            for key in ["uri", "type", "host", "port", "name", "user", "password", "sslmode", "schema"]:
                 if key in db:
                     config_dict[f"db_{key}"] = db[key]
+
+        if "supabase" in data:
+            sb = data["supabase"]
+            if "url" in sb:
+                config_dict["supabase_url"] = sb["url"]
+            if "key" in sb:
+                config_dict["supabase_key"] = sb["key"]
+            if "schema" in sb:
+                config_dict["db_schema"] = sb["schema"]
+            # Auto-set type to supabase
+            if "supabase_url" in config_dict:
+                config_dict["db_type"] = "supabase"
 
         if "llm" in data:
             llm = data["llm"]
@@ -204,6 +246,10 @@ class QASQLConfig:
             "QASQL_DB_NAME": "db_name",
             "QASQL_DB_USER": "db_user",
             "QASQL_DB_PASSWORD": "db_password",
+            "QASQL_DB_SSLMODE": "db_sslmode",
+            "QASQL_DB_SCHEMA": "db_schema",
+            "SUPABASE_URL": "supabase_url",
+            "SUPABASE_KEY": "supabase_key",
             "QASQL_LLM_PROVIDER": "llm_provider",
             "QASQL_LLM_MODEL": "llm_model",
             "QASQL_OLLAMA_URL": "llm_base_url",
@@ -215,5 +261,9 @@ class QASQLConfig:
 
         if os.environ.get("QASQL_DB_PORT"):
             config_dict["db_port"] = int(os.environ["QASQL_DB_PORT"])
+
+        # Auto-detect Supabase if URL is set
+        if os.environ.get("SUPABASE_URL") and not os.environ.get("QASQL_DB_TYPE"):
+            config_dict["db_type"] = "supabase"
 
         return cls(**config_dict)

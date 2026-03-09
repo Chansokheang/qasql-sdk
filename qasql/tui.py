@@ -47,6 +47,11 @@ class TerminalUI:
 
         # Database Configuration
         self.db_uri: Optional[str] = None
+        self.db_type: Optional[str] = None
+
+        # Supabase Configuration
+        self.supabase_url: Optional[str] = None
+        self.supabase_key: Optional[str] = None
 
     def print_banner(self):
         """Print welcome banner."""
@@ -81,7 +86,9 @@ class TerminalUI:
             ("/llm anthropic [api_key]", "Use Claude API"),
             ("/llm openai [api_key]", "Use OpenAI API"),
             ("/db", "Show current database connection"),
-            ("/db <path_or_uri>", "Connect to database"),
+            ("/db <path_or_uri>", "Connect to SQLite/PostgreSQL database"),
+            ("/supabase", "Connect to Supabase (uses env vars)"),
+            ("/supabase <url> <key>", "Connect to Supabase with credentials"),
         ]
 
         for cmd, desc in conn_commands:
@@ -147,7 +154,9 @@ class TerminalUI:
             status_table.add_row("API Key", "[dim]Not set[/dim]")
 
         # Database Status
-        if self.db_uri:
+        if self.supabase_url:
+            status_table.add_row("Database", f"Supabase: {self.supabase_url[:40]}...")
+        elif self.db_uri:
             status_table.add_row("Database", self.db_uri)
         else:
             status_table.add_row("Database", "[yellow]Not connected[/yellow]")
@@ -322,7 +331,16 @@ class TerminalUI:
                     progress.update(task, description="Connected!")
                     time.sleep(0.3)
 
+                    # Determine database type for display
+                    if "postgresql" in self.db_uri or "postgres" in self.db_uri:
+                        db_type_display = "PostgreSQL"
+                    elif "sqlite" in self.db_uri or self.db_uri.endswith((".sqlite", ".db")):
+                        db_type_display = "SQLite"
+                    else:
+                        db_type_display = "SQLite"
+
                     self.console.print(Panel(
+                        f"[green]Type:[/green] {db_type_display}\n"
                         f"[green]Database:[/green] {result.database_name}\n"
                         f"[green]Tables:[/green] {result.tables_found}\n"
                         f"[green]LLM:[/green] {self.llm_provider} / {self.llm_model}\n"
@@ -330,6 +348,102 @@ class TerminalUI:
                         title="Connected Successfully",
                         border_style="green"
                     ))
+                    return True
+                else:
+                    self.console.print(f"[red]Error:[/red] {result.errors}")
+                    return False
+
+            except Exception as e:
+                self.console.print(f"[red]Connection failed:[/red] {e}")
+                return False
+
+    def connect_supabase(self, args: str = None):
+        """Connect to Supabase database."""
+        parts = args.split() if args else []
+
+        # Get credentials from args or environment
+        if len(parts) >= 2:
+            self.supabase_url = parts[0]
+            self.supabase_key = parts[1]
+        else:
+            self.supabase_url = os.environ.get("SUPABASE_URL")
+            self.supabase_key = os.environ.get("SUPABASE_KEY")
+
+        if not self.supabase_url or not self.supabase_key:
+            self.console.print("[red]Supabase credentials not found.[/red]")
+            self.console.print("\n[bold]Options:[/bold]")
+            self.console.print("  1. Set environment variables:")
+            self.console.print("     export SUPABASE_URL='https://xxx.supabase.co'")
+            self.console.print("     export SUPABASE_KEY='your-key'")
+            self.console.print("\n  2. Pass credentials directly:")
+            self.console.print("     /supabase https://xxx.supabase.co your-key")
+            return False
+
+        self.db_type = "supabase"
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=self.console,
+        ) as progress:
+            task = progress.add_task("Connecting to Supabase...", total=None)
+
+            try:
+                # Build engine kwargs
+                engine_kwargs = {
+                    "supabase_url": self.supabase_url,
+                    "supabase_key": self.supabase_key,
+                    "llm_provider": self.llm_provider,
+                    "llm_model": self.llm_model,
+                    "output_dir": "./qasql_output"
+                }
+
+                if self.llm_provider == "ollama":
+                    engine_kwargs["llm_base_url"] = self.llm_base_url
+
+                # Set API key in environment if needed
+                if self.llm_api_key:
+                    if self.llm_provider == "anthropic":
+                        os.environ["ANTHROPIC_API_KEY"] = self.llm_api_key
+                    elif self.llm_provider == "openai":
+                        os.environ["OPENAI_API_KEY"] = self.llm_api_key
+
+                self.engine = QASQLEngine(**engine_kwargs)
+
+                progress.update(task, description="Extracting schema...")
+                result = self.engine.setup()
+
+                if result.success:
+                    progress.update(task, description="Connected!")
+                    time.sleep(0.3)
+
+                    # Mask the key for display
+                    masked_key = self.supabase_key[:15] + "..." if len(self.supabase_key) > 15 else "***"
+
+                    self.console.print(Panel(
+                        f"[green]Type:[/green] Supabase\n"
+                        f"[green]URL:[/green] {self.supabase_url}\n"
+                        f"[green]Key:[/green] {masked_key}\n"
+                        f"[green]Tables:[/green] {result.tables_found}\n"
+                        f"[green]LLM:[/green] {self.llm_provider} / {self.llm_model}",
+                        title="Connected to Supabase",
+                        border_style="green"
+                    ))
+
+                    if result.tables_found == 0:
+                        self.console.print("\n[yellow]No tables found![/yellow]")
+                        self.console.print("[dim]Make sure you created the get_tables function in Supabase SQL Editor:[/dim]")
+                        self.console.print("""
+[cyan]CREATE OR REPLACE FUNCTION get_tables(schema_name text DEFAULT 'public')
+RETURNS TABLE(table_name text)
+LANGUAGE sql SECURITY DEFINER AS $$
+  SELECT t.table_name::text
+  FROM information_schema.tables t
+  WHERE t.table_schema = schema_name
+    AND t.table_type = 'BASE TABLE'
+  ORDER BY t.table_name;
+$$;[/cyan]
+""")
                     return True
                 else:
                     self.console.print(f"[red]Error:[/red] {result.errors}")
@@ -502,20 +616,33 @@ class TerminalUI:
 
     def _is_general_question(self, text: str) -> bool:
         """
-        Use LLM to check if the question is a general/off-topic question.
+        Use LLM to classify if the question is database-related or general chitchat.
         Returns True if NOT related to database/SQL queries.
         """
         if not self.engine:
             return False  # Can't check without LLM, assume it's a query
 
-        prompt = f"""You are a classifier. Determine if the following user input is:
-1. A DATABASE QUERY - asking about data, records, statistics, or anything that would require SQL
-2. A GENERAL QUESTION - greetings, chitchat, general knowledge, math, coding help, or anything NOT related to querying a database
+        # Get table names for context
+        try:
+            tables = self.engine.get_tables()
+            table_context = f"Available tables: {', '.join(tables)}" if tables else ""
+        except:
+            table_context = ""
+
+        prompt = f"""You are a query classifier for a Text-to-SQL system. The user is connected to a database.
+
+{table_context}
+
+Classify the following user input into one of two categories:
+- DATABASE: Any question asking about data, records, counts, statistics, inventory, stock, products, or anything that could potentially be answered by querying a database. This includes questions in ANY language (Korean, Chinese, Japanese, etc.).
+- GENERAL: ONLY simple greetings (hi, hello, bye), thank you messages, or questions clearly unrelated to data (e.g., "what is the weather", "tell me a joke", "how are you").
+
+IMPORTANT: When in doubt, ALWAYS classify as DATABASE. The user is connected to a database, so assume they want to query it.
 
 User input: "{text}"
 
-Reply with ONLY one word: "DATABASE" or "GENERAL"
-"""
+Reply with ONLY one word: DATABASE or GENERAL"""
+
         try:
             response = self.engine.llm_client.complete(prompt=prompt, max_tokens=10)
             return "GENERAL" in response.upper()
@@ -545,7 +672,8 @@ Reply with ONLY one word: "DATABASE" or "GENERAL"
         model: str = None,
         provider: str = None,
         api_key: str = None,
-        base_url: str = None
+        base_url: str = None,
+        supabase: bool = False
     ):
         """Main loop."""
         self.print_banner()
@@ -560,8 +688,10 @@ Reply with ONLY one word: "DATABASE" or "GENERAL"
         if base_url:
             self.llm_base_url = base_url
 
-        # Auto-connect if db_uri provided
-        if db_uri:
+        # Auto-connect if db_uri or supabase provided
+        if supabase:
+            self.connect_supabase()
+        elif db_uri:
             self.connect_database(db_uri)
 
         current_hint = None
@@ -604,6 +734,9 @@ Reply with ONLY one word: "DATABASE" or "GENERAL"
 
                     elif cmd == "/db" or cmd == "/connect":
                         self.connect_database(arg if arg else None)
+
+                    elif cmd == "/supabase":
+                        self.connect_supabase(arg if arg else None)
 
                     elif cmd == "/tables":
                         self.show_tables()
@@ -682,6 +815,9 @@ Examples:
   python -m qasql.tui --db sqlite:///path/to/db.sqlite
   python -m qasql.tui --db postgresql://user:pass@localhost/mydb
 
+  # Connect to Supabase (requires SUPABASE_URL and SUPABASE_KEY env vars)
+  python -m qasql.tui --supabase
+
   # Use different LLM providers
   python -m qasql.tui --provider ollama --model llama3.2:3b
   python -m qasql.tui --provider anthropic --api-key sk-ant-xxx
@@ -697,6 +833,11 @@ Examples:
         "--db", "-d",
         dest="db_uri",
         help="Database path or URI (SQLite file path or full URI)"
+    )
+    parser.add_argument(
+        "--supabase", "-s",
+        action="store_true",
+        help="Connect to Supabase (uses SUPABASE_URL and SUPABASE_KEY env vars)"
     )
 
     # LLM options
@@ -738,7 +879,8 @@ Examples:
         model=args.model,
         provider=args.provider,
         api_key=args.api_key,
-        base_url=args.base_url
+        base_url=args.base_url,
+        supabase=args.supabase
     )
 
 

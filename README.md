@@ -15,7 +15,7 @@ QA-SQL (Query Augmentation to SQL) is a multi-stage pipeline that converts natur
 - **Privacy-First**: Run locally with Ollama - no data leaves your network
 - **Multi-Strategy Generation**: Generates 4-5 SQL candidates using different approaches
 - **Smart Selection**: LLM-as-a-Judge evaluates and picks the best SQL
-- **Database Support**: SQLite (local) and PostgreSQL (remote)
+- **Database Support**: SQLite, PostgreSQL, and Supabase
 - **Flexible LLM**: Ollama, Anthropic Claude, or OpenAI
 
 ---
@@ -28,6 +28,10 @@ QA-SQL (Query Augmentation to SQL) is a multi-stage pipeline that converts natur
   - [With Hint](#with-hint-better-accuracy)
   - [Cloud LLM Providers](#using-cloud-llm-providers)
   - [Remote Database](#remote-database-connection)
+- [Supabase](#supabase)
+  - [Supabase Setup](#supabase-setup)
+  - [Supabase Python SDK](#supabase-python-sdk)
+  - [Supabase Terminal UI](#supabase-terminal-ui)
 - [Terminal UI](#terminal-ui)
   - [Launch Terminal UI](#launch-terminal-ui)
   - [Terminal UI Commands](#terminal-ui-commands)
@@ -156,6 +160,114 @@ export QASQL_DB_PASSWORD='password'
 
 ---
 
+# Supabase
+
+Connect to Supabase databases using the official `supabase-py` client.
+
+## Supabase Setup
+
+**Step 1: Install Supabase support**
+
+```bash
+pip install supabase
+```
+
+**Step 2: Get your Supabase credentials**
+
+1. Go to [Supabase Dashboard](https://supabase.com/dashboard)
+2. Select your project
+3. Go to **Settings → API**
+4. Copy:
+   - **Project URL**: `https://xxx.supabase.co`
+   - **Service Role Key** (recommended) or **Anon Key**
+
+**Step 3: Create helper functions in Supabase**
+
+Run this in the **Supabase SQL Editor**:
+
+```sql
+-- Function to get all tables (required)
+CREATE OR REPLACE FUNCTION get_tables(schema_name text DEFAULT 'public')
+RETURNS TABLE(table_name text)
+LANGUAGE sql SECURITY DEFINER AS $$
+  SELECT t.table_name::text
+  FROM information_schema.tables t
+  WHERE t.table_schema = schema_name
+    AND t.table_type = 'BASE TABLE'
+  ORDER BY t.table_name;
+$$;
+
+-- Function to execute SQL (required for complex queries)
+CREATE OR REPLACE FUNCTION exec_sql(query text)
+RETURNS json LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE result json;
+BEGIN
+    EXECUTE 'SELECT COALESCE(json_agg(row_to_json(t)), ''[]''::json) FROM (' || query || ') t' INTO result;
+    RETURN result;
+END;
+$$;
+```
+
+**Step 4: Set environment variables**
+
+```bash
+export SUPABASE_URL='https://xxx.supabase.co'
+export SUPABASE_KEY='your-service-role-key'
+```
+
+## Supabase Python SDK
+
+```python
+from qasql import QASQLEngine
+
+# Using environment variables
+engine = QASQLEngine(
+    supabase_url="https://xxx.supabase.co",
+    supabase_key="your-service-role-key",
+    llm_provider="anthropic"
+)
+
+# Setup (extracts schema from Supabase)
+engine.setup()
+
+# Generate SQL
+result = engine.query("How many users are there?")
+print(result.sql)
+
+# Execute SQL
+rows, columns = engine.execute_sql(result.sql)
+```
+
+Or using environment variables:
+
+```python
+from qasql.config import QASQLConfig
+
+# Auto-detects Supabase from SUPABASE_URL env var
+config = QASQLConfig.from_env()
+engine = QASQLEngine(config=config)
+```
+
+## Supabase Terminal UI
+
+```bash
+# Connect using environment variables
+python -m qasql.tui --supabase
+
+# Or connect inside the TUI
+python -m qasql.tui
+# Then type: /supabase
+```
+
+**Supabase TUI Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `/supabase` | Connect using SUPABASE_URL and SUPABASE_KEY env vars |
+| `/supabase <url> <key>` | Connect with credentials directly |
+
+---
+
 # Terminal UI
 
 Interactive terminal interface for text-to-SQL queries.
@@ -189,6 +301,8 @@ python -m qasql.tui --base-url http://192.168.1.100:11434
 |---------|-------------|
 | `/db <path>` | Connect to SQLite database |
 | `/db postgresql://...` | Connect to remote PostgreSQL |
+| `/supabase` | Connect to Supabase (uses env vars) |
+| `/supabase <url> <key>` | Connect to Supabase with credentials |
 | `/llm ollama [model]` | Use local Ollama |
 | `/llm anthropic [key]` | Use Claude API |
 | `/llm openai [key]` | Use OpenAI API |
@@ -239,10 +353,11 @@ python -m qasql query --db-uri sqlite:///database.sqlite \
 
 ## Database Support
 
-| Database | URI Format | Installation |
+| Database | Connection | Installation |
 |----------|------------|--------------|
-| SQLite | `sqlite:///path/to/db.sqlite` | Built-in |
-| PostgreSQL | `postgresql://user:pass@host:port/db` | `pip install -e ".[postgres]"` |
+| SQLite | `db_uri="sqlite:///path/to/db.sqlite"` | Built-in |
+| PostgreSQL | `db_uri="postgresql://user:pass@host:port/db"` | `pip install -e ".[postgres]"` |
+| Supabase | `supabase_url="https://xxx.supabase.co"` | `pip install supabase` |
 
 ---
 
@@ -257,8 +372,11 @@ python test_schema_only.py
 # Test with California Schools database
 python test_california_schools.py
 
-# Test remote database connection
+# Test remote PostgreSQL connection
 python test_remote_database.py
+
+# Test Supabase connection
+python test_supabase.py
 
 # Interactive demo
 python interactive_demo.py --db-uri sqlite:///path/to/db.sqlite
@@ -272,8 +390,12 @@ python interactive_demo.py --db-uri sqlite:///path/to/db.sqlite
 |-------|----------|
 | `Cannot connect to Ollama` | Run `ollama serve` first |
 | `psycopg2 is required` | Run `pip install -e ".[postgres]"` |
+| `supabase is required` | Run `pip install supabase` |
 | `Connection refused` (PostgreSQL) | Check if PostgreSQL server is running |
 | `Database not found` | Check file path is correct |
+| `Could not retrieve tables` (Supabase) | Create `get_tables` function in SQL Editor |
+| `Schema is empty` (Supabase) | Create `exec_sql` function in SQL Editor |
+| `Wrong SQL generated` (Supabase) | Delete cache (`rm -rf qasql_output/`) and reconnect |
 
 ---
 

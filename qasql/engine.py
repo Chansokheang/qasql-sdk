@@ -38,12 +38,16 @@ class QASQLEngine:
     def __init__(
         self,
         db_uri: str = None,
-        db_type: Literal["sqlite", "postgresql"] = None,
+        db_type: Literal["sqlite", "postgresql", "supabase"] = None,
         db_host: str = "localhost",
         db_port: int = 5432,
         db_name: str = None,
         db_user: str = None,
         db_password: str = None,
+        db_sslmode: str = "prefer",
+        db_schema: str = "public",
+        supabase_url: str = None,
+        supabase_key: str = None,
         llm_provider: Literal["ollama", "anthropic", "openai"] = "ollama",
         llm_model: str = None,
         llm_base_url: str = "http://localhost:11434",
@@ -57,12 +61,16 @@ class QASQLEngine:
 
         Args:
             db_uri: Database connection URI
-            db_type: Database type ("sqlite" or "postgresql")
+            db_type: Database type ("sqlite", "postgresql", or "supabase")
             db_host: PostgreSQL host
             db_port: PostgreSQL port
             db_name: Database name
             db_user: Database username
             db_password: Database password
+            db_sslmode: SSL mode for PostgreSQL (disable, allow, prefer, require)
+            db_schema: PostgreSQL/Supabase schema (default: "public")
+            supabase_url: Supabase project URL (e.g., https://xxx.supabase.co)
+            supabase_key: Supabase API key (anon or service_role)
             llm_provider: LLM provider ("ollama", "anthropic", "openai")
             llm_model: LLM model name
             llm_base_url: Ollama server URL
@@ -76,14 +84,23 @@ class QASQLEngine:
         elif config:
             self.config = config
         else:
+            # Auto-detect Supabase if URL is provided
+            effective_db_type = db_type
+            if supabase_url and not db_type:
+                effective_db_type = "supabase"
+
             self.config = QASQLConfig(
                 db_uri=db_uri or "",
-                db_type=db_type or "sqlite",
+                db_type=effective_db_type or "sqlite",
                 db_host=db_host,
                 db_port=db_port,
                 db_name=db_name or "",
                 db_user=db_user or "",
                 db_password=db_password or "",
+                db_sslmode=db_sslmode,
+                db_schema=db_schema,
+                supabase_url=supabase_url or "",
+                supabase_key=supabase_key or "",
                 llm_provider=llm_provider,
                 llm_model=llm_model or ("llama3.2" if llm_provider == "ollama" else "claude-sonnet-4-5-20250929"),
                 llm_base_url=llm_base_url,
