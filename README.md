@@ -15,7 +15,7 @@ QA-SQL (Query Augmentation to SQL) is a multi-stage pipeline that converts natur
 - **Privacy-First**: Run locally with Ollama - no data leaves your network
 - **Multi-Strategy Generation**: Generates 4-5 SQL candidates using different approaches
 - **Smart Selection**: LLM-as-a-Judge evaluates and picks the best SQL
-- **Database Support**: SQLite, PostgreSQL, and Supabase
+- **Database Support**: SQLite, PostgreSQL, MySQL, and Supabase
 - **Flexible LLM**: Ollama, Anthropic Claude, or OpenAI
 
 ---
@@ -28,6 +28,9 @@ QA-SQL (Query Augmentation to SQL) is a multi-stage pipeline that converts natur
   - [With Hint](#with-hint-better-accuracy)
   - [Cloud LLM Providers](#using-cloud-llm-providers)
   - [Remote Database](#remote-database-connection)
+- [MySQL](#mysql)
+  - [MySQL Python SDK](#mysql-python-sdk)
+  - [MySQL Terminal UI](#mysql-terminal-ui)
 - [Supabase](#supabase)
   - [Supabase Setup](#supabase-setup)
   - [Supabase Python SDK](#supabase-python-sdk)
@@ -53,6 +56,9 @@ pip install -e ".[ui]"
 
 # Install with PostgreSQL support
 pip install -e ".[postgres]"
+
+# Install with MySQL support
+pip install -e ".[mysql]"
 
 # Install all extras
 pip install -e ".[all]"
@@ -142,9 +148,19 @@ engine = QASQLEngine(
     db_uri="postgresql://user:pass@localhost:5432/mydb"
 )
 
-# AWS RDS
+# MySQL
+engine = QASQLEngine(
+    db_uri="mysql://user:pass@localhost:3306/mydb"
+)
+
+# AWS RDS (PostgreSQL)
 engine = QASQLEngine(
     db_uri="postgresql://admin:pass@mydb.xxx.rds.amazonaws.com:5432/prod"
+)
+
+# AWS RDS (MySQL)
+engine = QASQLEngine(
+    db_uri="mysql://admin:pass@mydb.xxx.rds.amazonaws.com:3306/prod"
 )
 ```
 
@@ -156,6 +172,109 @@ export QASQL_DB_PORT='5432'
 export QASQL_DB_NAME='mydb'
 export QASQL_DB_USER='postgres'
 export QASQL_DB_PASSWORD='password'
+```
+
+---
+
+# MySQL
+
+Connect to MySQL databases using `mysql-connector-python` or `pymysql`.
+
+## MySQL Python SDK
+
+**Step 1: Install MySQL support**
+
+```bash
+pip install -e ".[mysql]"
+# or manually:
+pip install mysql-connector-python
+# or:
+pip install pymysql
+```
+
+**Step 2: Connect with a URI**
+
+```python
+from qasql import QASQLEngine
+
+engine = QASQLEngine(
+    db_uri="mysql://user:password@localhost:3306/mydb"
+)
+engine.setup()
+
+result = engine.query("How many orders were placed this month?")
+print(result.sql)
+
+rows, columns = engine.execute_sql(result.sql)
+```
+
+**Or use individual parameters:**
+
+```python
+from qasql import QASQLEngine
+from qasql.config import QASQLConfig
+
+config = QASQLConfig(
+    db_type="mysql",
+    db_host="localhost",
+    db_port=3306,
+    db_name="mydb",
+    db_user="user",
+    db_password="password",
+    llm_provider="ollama",
+    llm_model="llama3.2"
+)
+engine = QASQLEngine(config=config)
+engine.setup()
+```
+
+**Or use environment variables:**
+
+```bash
+export QASQL_DB_TYPE='mysql'
+export QASQL_DB_HOST='localhost'
+export QASQL_DB_PORT='3306'
+export QASQL_DB_NAME='mydb'
+export QASQL_DB_USER='user'
+export QASQL_DB_PASSWORD='password'
+```
+
+```python
+config = QASQLConfig.from_env()
+engine = QASQLEngine(config=config)
+```
+
+## MySQL Terminal UI
+
+```bash
+# Connect using environment variables (MYSQL_HOST, MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD)
+python -m qasql.tui --mysql
+
+# Connect via URI with --db flag
+python -m qasql.tui --db mysql://user:password@localhost:3306/mydb
+
+# Or connect inside the TUI
+python -m qasql.tui
+# Then type: /mysql localhost mydb user password
+# Or with custom port: /mysql localhost:3306 mydb user password
+```
+
+**MySQL TUI Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `/mysql <host> <db> <user> <pass>` | Connect to MySQL on default port 3306 |
+| `/mysql <host>:<port> <db> <user> <pass>` | Connect to MySQL on custom port |
+| `/db mysql://user:pass@host:3306/db` | Connect using a MySQL URI |
+
+**Environment variables for `--mysql` flag:**
+
+```bash
+export MYSQL_HOST='localhost'
+export MYSQL_PORT='3306'          # optional, default 3306
+export MYSQL_DATABASE='mydb'
+export MYSQL_USER='user'
+export MYSQL_PASSWORD='password'
 ```
 
 ---
@@ -284,6 +403,10 @@ python -m qasql.tui --db ./database.sqlite
 # With PostgreSQL (remote database)
 python -m qasql.tui --db postgresql://user:pass@localhost:5432/mydb
 
+# With MySQL
+python -m qasql.tui --db mysql://user:pass@localhost:3306/mydb
+python -m qasql.tui --mysql   # uses MYSQL_* env vars
+
 # With Anthropic Claude
 python -m qasql.tui --provider anthropic --api-key sk-ant-xxx
 
@@ -301,6 +424,8 @@ python -m qasql.tui --base-url http://192.168.1.100:11434
 |---------|-------------|
 | `/db <path>` | Connect to SQLite database |
 | `/db postgresql://...` | Connect to remote PostgreSQL |
+| `/db mysql://...` | Connect to MySQL via URI |
+| `/mysql <host> <db> <user> <pass>` | Connect to MySQL |
 | `/supabase` | Connect to Supabase (uses env vars) |
 | `/supabase <url> <key>` | Connect to Supabase with credentials |
 | `/llm ollama [model]` | Use local Ollama |
@@ -357,6 +482,7 @@ python -m qasql query --db-uri sqlite:///database.sqlite \
 |----------|------------|--------------|
 | SQLite | `db_uri="sqlite:///path/to/db.sqlite"` | Built-in |
 | PostgreSQL | `db_uri="postgresql://user:pass@host:port/db"` | `pip install -e ".[postgres]"` |
+| MySQL | `db_uri="mysql://user:pass@host:3306/db"` | `pip install -e ".[mysql]"` |
 | Supabase | `supabase_url="https://xxx.supabase.co"` | `pip install supabase` |
 
 ---
@@ -390,8 +516,10 @@ python interactive_demo.py --db-uri sqlite:///path/to/db.sqlite
 |-------|----------|
 | `Cannot connect to Ollama` | Run `ollama serve` first |
 | `psycopg2 is required` | Run `pip install -e ".[postgres]"` |
+| `MySQL driver not found` | Run `pip install -e ".[mysql]"` or `pip install mysql-connector-python` |
 | `supabase is required` | Run `pip install supabase` |
 | `Connection refused` (PostgreSQL) | Check if PostgreSQL server is running |
+| `Connection refused` (MySQL) | Check if MySQL server is running and credentials are correct |
 | `Database not found` | Check file path is correct |
 | `Could not retrieve tables` (Supabase) | Create `get_tables` function in SQL Editor |
 | `Schema is empty` (Supabase) | Create `exec_sql` function in SQL Editor |

@@ -574,6 +574,161 @@ class SupabaseConnector(BaseDatabaseConnector):
         )
 
 
+class MySQLConnector(BaseDatabaseConnector):
+    """MySQL database connector."""
+
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        database: str,
+        user: str,
+        password: str,
+        charset: str = "utf8mb4"
+    ):
+        self.host = host
+        self.port = port
+        self.database = database
+        self.user = user
+        self.password = password
+        self.charset = charset
+        self.connection = None
+
+    def connect(self):
+        try:
+            import mysql.connector
+            self.connection = mysql.connector.connect(
+                host=self.host,
+                port=self.port,
+                database=self.database,
+                user=self.user,
+                password=self.password,
+                charset=self.charset,
+                use_pure=True
+            )
+        except ImportError:
+            try:
+                import pymysql
+                self.connection = pymysql.connect(
+                    host=self.host,
+                    port=self.port,
+                    database=self.database,
+                    user=self.user,
+                    password=self.password,
+                    charset=self.charset,
+                    cursorclass=pymysql.cursors.Cursor
+                )
+            except ImportError:
+                raise ImportError(
+                    "MySQL driver not found. "
+                    "Install with: pip install qasql[mysql]"
+                )
+
+    def disconnect(self):
+        if self.connection:
+            self.connection.close()
+            self.connection = None
+
+    def execute(self, sql: str, timeout: float = 30.0) -> tuple[list[tuple], list[str]]:
+        if not self.connection:
+            self.connect()
+
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute(f"SET SESSION max_execution_time = {int(timeout * 1000)}")
+        except Exception:
+            pass  # Older MySQL versions may not support this
+
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+        column_names = [desc[0] for desc in cursor.description] if cursor.description else []
+        return list(rows), column_names
+
+    def get_tables(self) -> list[str]:
+        if not self.connection:
+            self.connect()
+
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            SELECT table_name FROM information_schema.tables
+            WHERE table_schema = %s AND table_type = 'BASE TABLE'
+            ORDER BY table_name
+        """, (self.database,))
+        return [row[0] for row in cursor.fetchall()]
+
+    def get_table_schema(self, table_name: str) -> dict[str, Any]:
+        if not self.connection:
+            self.connect()
+
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            SELECT column_name, data_type, is_nullable, column_default, column_key
+            FROM information_schema.columns
+            WHERE table_name = %s AND table_schema = %s
+            ORDER BY ordinal_position
+        """, (table_name, self.database))
+
+        columns = []
+        primary_keys = []
+
+        for col in cursor.fetchall():
+            col_name, col_type, is_nullable, col_default, col_key = col
+            column_data = {
+                "name": col_name,
+                "type": col_type.upper(),
+                "nullable": is_nullable == "YES",
+                "default": col_default,
+            }
+
+            if col_type.upper() in ("TEXT", "VARCHAR", "CHAR", "ENUM"):
+                try:
+                    cursor.execute(f"""
+                        SELECT DISTINCT `{col_name}` FROM `{table_name}`
+                        WHERE `{col_name}` IS NOT NULL LIMIT 20
+                    """)
+                    distinct_values = [row[0] for row in cursor.fetchall()]
+                    if len(distinct_values) <= 15:
+                        column_data["distinct_values"] = distinct_values
+                except Exception:
+                    pass
+
+            columns.append(column_data)
+            if col_key == "PRI":
+                primary_keys.append(col_name)
+
+        cursor.execute("""
+            SELECT kcu.column_name, kcu.referenced_table_name, kcu.referenced_column_name
+            FROM information_schema.key_column_usage kcu
+            JOIN information_schema.referential_constraints rc
+                ON kcu.constraint_name = rc.constraint_name
+                AND kcu.constraint_schema = rc.constraint_schema
+            WHERE kcu.table_name = %s AND kcu.table_schema = %s
+                AND kcu.referenced_table_name IS NOT NULL
+        """, (table_name, self.database))
+        foreign_keys = [
+            {"column": fk[0], "references_table": fk[1], "references_column": fk[2]}
+            for fk in cursor.fetchall()
+        ]
+
+        cursor.execute(f"SELECT COUNT(*) FROM `{table_name}`")
+        row_count = cursor.fetchone()[0]
+
+        return {
+            "columns": columns,
+            "primary_keys": primary_keys,
+            "foreign_keys": foreign_keys,
+            "row_count": row_count
+        }
+
+    def get_sample_rows(self, table_name: str, limit: int = 5) -> list[tuple]:
+        if not self.connection:
+            self.connect()
+
+        cursor = self.connection.cursor()
+        cursor.execute(f"SELECT * FROM `{table_name}` LIMIT {limit}")
+        return list(cursor.fetchall())
+
+
 class DatabaseConnector:
     """Factory class for creating database connectors."""
 
@@ -597,6 +752,14 @@ class DatabaseConnector:
                 url=config.supabase_url,
                 key=config.supabase_key,
                 schema=config.db_schema
+            )
+        elif config.db_type == "mysql":
+            return MySQLConnector(
+                host=config.db_host,
+                port=config.db_port,
+                database=config.db_name,
+                user=config.db_user,
+                password=config.db_password,
             )
         else:
             raise ValueError(f"Unsupported database type: {config.db_type}")

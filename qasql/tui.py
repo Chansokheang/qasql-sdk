@@ -53,6 +53,13 @@ class TerminalUI:
         self.supabase_url: Optional[str] = None
         self.supabase_key: Optional[str] = None
 
+        # MySQL Configuration
+        self.mysql_host: Optional[str] = None
+        self.mysql_port: int = 3306
+        self.mysql_db: Optional[str] = None
+        self.mysql_user: Optional[str] = None
+        self.mysql_password: Optional[str] = None
+
     def print_banner(self):
         """Print welcome banner."""
         banner = """
@@ -86,9 +93,11 @@ class TerminalUI:
             ("/llm anthropic [api_key]", "Use Claude API"),
             ("/llm openai [api_key]", "Use OpenAI API"),
             ("/db", "Show current database connection"),
-            ("/db <path_or_uri>", "Connect to SQLite/PostgreSQL database"),
+            ("/db <path_or_uri>", "Connect to SQLite/PostgreSQL/MySQL database"),
             ("/supabase", "Connect to Supabase (uses env vars)"),
             ("/supabase <url> <key>", "Connect to Supabase with credentials"),
+            ("/mysql <host> <db> <user> <pass>", "Connect to MySQL database"),
+            ("/mysql <host>:<port> <db> <user> <pass>", "Connect to MySQL on custom port"),
         ]
 
         for cmd, desc in conn_commands:
@@ -156,6 +165,8 @@ class TerminalUI:
         # Database Status
         if self.supabase_url:
             status_table.add_row("Database", f"Supabase: {self.supabase_url[:40]}...")
+        elif self.mysql_host:
+            status_table.add_row("Database", f"MySQL: {self.mysql_user}@{self.mysql_host}:{self.mysql_port}/{self.mysql_db}")
         elif self.db_uri:
             status_table.add_row("Database", self.db_uri)
         else:
@@ -254,7 +265,7 @@ class TerminalUI:
         path = path.strip()
 
         # Already a URI
-        if path.startswith("sqlite:///") or path.startswith("postgresql://"):
+        if path.startswith("sqlite:///") or path.startswith("postgresql://") or path.startswith("mysql://"):
             return path
 
         # PostgreSQL shorthand
@@ -334,6 +345,8 @@ class TerminalUI:
                     # Determine database type for display
                     if "postgresql" in self.db_uri or "postgres" in self.db_uri:
                         db_type_display = "PostgreSQL"
+                    elif "mysql" in self.db_uri:
+                        db_type_display = "MySQL"
                     elif "sqlite" in self.db_uri or self.db_uri.endswith((".sqlite", ".db")):
                         db_type_display = "SQLite"
                     else:
@@ -444,6 +457,99 @@ LANGUAGE sql SECURITY DEFINER AS $$
   ORDER BY t.table_name;
 $$;[/cyan]
 """)
+                    return True
+                else:
+                    self.console.print(f"[red]Error:[/red] {result.errors}")
+                    return False
+
+            except Exception as e:
+                self.console.print(f"[red]Connection failed:[/red] {e}")
+                return False
+
+    def connect_mysql(self, args: str = None):
+        """Connect to MySQL database."""
+        parts = args.split() if args else []
+
+        if len(parts) >= 4:
+            host_port = parts[0]
+            self.mysql_db = parts[1]
+            self.mysql_user = parts[2]
+            self.mysql_password = parts[3]
+            if ":" in host_port:
+                self.mysql_host, port_str = host_port.split(":", 1)
+                self.mysql_port = int(port_str)
+            else:
+                self.mysql_host = host_port
+                self.mysql_port = 3306
+        else:
+            self.mysql_host = os.environ.get("MYSQL_HOST", "localhost")
+            port_env = os.environ.get("MYSQL_PORT", "3306")
+            self.mysql_port = int(port_env)
+            self.mysql_db = os.environ.get("MYSQL_DATABASE") or os.environ.get("MYSQL_DB")
+            self.mysql_user = os.environ.get("MYSQL_USER")
+            self.mysql_password = os.environ.get("MYSQL_PASSWORD")
+
+        if not all([self.mysql_host, self.mysql_db, self.mysql_user, self.mysql_password is not None]):
+            self.console.print("[red]MySQL credentials not found.[/red]")
+            self.console.print("\n[bold]Options:[/bold]")
+            self.console.print("  1. Set environment variables:")
+            self.console.print("     export MYSQL_HOST='localhost'")
+            self.console.print("     export MYSQL_DATABASE='mydb'")
+            self.console.print("     export MYSQL_USER='user'")
+            self.console.print("     export MYSQL_PASSWORD='password'")
+            self.console.print("\n  2. Pass credentials directly:")
+            self.console.print("     /mysql localhost mydb user password")
+            self.console.print("     /mysql localhost:3306 mydb user password")
+            self.console.print("\n  3. Use a URI with /db:")
+            self.console.print("     /db mysql://user:password@localhost:3306/mydb")
+            return False
+
+        self.db_type = "mysql"
+        mysql_uri = f"mysql://{self.mysql_user}:{self.mysql_password}@{self.mysql_host}:{self.mysql_port}/{self.mysql_db}"
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=self.console,
+        ) as progress:
+            task = progress.add_task("Connecting to MySQL...", total=None)
+
+            try:
+                engine_kwargs = {
+                    "db_uri": mysql_uri,
+                    "llm_provider": self.llm_provider,
+                    "llm_model": self.llm_model,
+                    "output_dir": "./qasql_output"
+                }
+
+                if self.llm_provider == "ollama":
+                    engine_kwargs["llm_base_url"] = self.llm_base_url
+
+                if self.llm_api_key:
+                    if self.llm_provider == "anthropic":
+                        os.environ["ANTHROPIC_API_KEY"] = self.llm_api_key
+                    elif self.llm_provider == "openai":
+                        os.environ["OPENAI_API_KEY"] = self.llm_api_key
+
+                self.engine = QASQLEngine(**engine_kwargs)
+
+                progress.update(task, description="Extracting schema...")
+                result = self.engine.setup()
+
+                if result.success:
+                    progress.update(task, description="Connected!")
+                    time.sleep(0.3)
+
+                    self.console.print(Panel(
+                        f"[green]Type:[/green] MySQL\n"
+                        f"[green]Host:[/green] {self.mysql_host}:{self.mysql_port}\n"
+                        f"[green]Database:[/green] {self.mysql_db}\n"
+                        f"[green]User:[/green] {self.mysql_user}\n"
+                        f"[green]Tables:[/green] {result.tables_found}\n"
+                        f"[green]LLM:[/green] {self.llm_provider} / {self.llm_model}",
+                        title="Connected to MySQL",
+                        border_style="green"
+                    ))
                     return True
                 else:
                     self.console.print(f"[red]Error:[/red] {result.errors}")
@@ -673,7 +779,8 @@ Reply with ONLY one word: DATABASE or GENERAL"""
         provider: str = None,
         api_key: str = None,
         base_url: str = None,
-        supabase: bool = False
+        supabase: bool = False,
+        mysql: bool = False
     ):
         """Main loop."""
         self.print_banner()
@@ -688,9 +795,11 @@ Reply with ONLY one word: DATABASE or GENERAL"""
         if base_url:
             self.llm_base_url = base_url
 
-        # Auto-connect if db_uri or supabase provided
+        # Auto-connect if db_uri or supabase or mysql provided
         if supabase:
             self.connect_supabase()
+        elif mysql:
+            self.connect_mysql()
         elif db_uri:
             self.connect_database(db_uri)
 
@@ -737,6 +846,9 @@ Reply with ONLY one word: DATABASE or GENERAL"""
 
                     elif cmd == "/supabase":
                         self.connect_supabase(arg if arg else None)
+
+                    elif cmd == "/mysql":
+                        self.connect_mysql(arg if arg else None)
 
                     elif cmd == "/tables":
                         self.show_tables()
@@ -818,6 +930,9 @@ Examples:
   # Connect to Supabase (requires SUPABASE_URL and SUPABASE_KEY env vars)
   python -m qasql.tui --supabase
 
+  # Connect to MySQL (requires MYSQL_HOST, MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD env vars)
+  python -m qasql.tui --mysql
+
   # Use different LLM providers
   python -m qasql.tui --provider ollama --model llama3.2:3b
   python -m qasql.tui --provider anthropic --api-key sk-ant-xxx
@@ -838,6 +953,11 @@ Examples:
         "--supabase", "-s",
         action="store_true",
         help="Connect to Supabase (uses SUPABASE_URL and SUPABASE_KEY env vars)"
+    )
+    parser.add_argument(
+        "--mysql",
+        action="store_true",
+        help="Connect to MySQL (uses MYSQL_HOST, MYSQL_DATABASE, MYSQL_USER, MYSQL_PASSWORD env vars)"
     )
 
     # LLM options
@@ -880,7 +1000,8 @@ Examples:
         provider=args.provider,
         api_key=args.api_key,
         base_url=args.base_url,
-        supabase=args.supabase
+        supabase=args.supabase,
+        mysql=args.mysql
     )
 
 

@@ -6,8 +6,22 @@ Main entry point for the QA-SQL SDK.
 
 import json
 import time
+import decimal
+import datetime
 from pathlib import Path
 from typing import Literal, Optional
+
+
+class _JSONEncoder(json.JSONEncoder):
+    """JSON encoder that handles datetime, date, time, and Decimal types."""
+    def default(self, obj):
+        if isinstance(obj, (datetime.datetime, datetime.date, datetime.time)):
+            return obj.isoformat()
+        if isinstance(obj, decimal.Decimal):
+            return float(obj)
+        if isinstance(obj, bytes):
+            return obj.decode("utf-8", errors="replace")
+        return super().default(obj)
 
 from qasql.config import QASQLConfig
 from qasql.database import DatabaseConnector, BaseDatabaseConnector
@@ -38,7 +52,7 @@ class QASQLEngine:
     def __init__(
         self,
         db_uri: str = None,
-        db_type: Literal["sqlite", "postgresql", "supabase"] = None,
+        db_type: Literal["sqlite", "postgresql", "supabase", "mysql"] = None,
         db_host: str = "localhost",
         db_port: int = 5432,
         db_name: str = None,
@@ -207,7 +221,7 @@ class QASQLEngine:
         # Save schema
         schema_data["database"] = self._database_name
         with open(schema_path, "w", encoding="utf-8") as f:
-            json.dump(schema_data, f, indent=2, ensure_ascii=False)
+            json.dump(schema_data, f, indent=2, ensure_ascii=False, cls=_JSONEncoder)
 
         # Generate descriptions
         try:
@@ -221,7 +235,7 @@ class QASQLEngine:
         # Save descriptions
         self._profile["database"] = self._database_name
         with open(descriptions_path, "w", encoding="utf-8") as f:
-            json.dump(self._profile, f, indent=2, ensure_ascii=False)
+            json.dump(self._profile, f, indent=2, ensure_ascii=False, cls=_JSONEncoder)
 
         self._initialized = True
 

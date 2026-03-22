@@ -39,7 +39,7 @@ class QASQLConfig:
     """
 
     # Database settings
-    db_type: Literal["sqlite", "postgresql", "supabase"] = "sqlite"
+    db_type: Literal["sqlite", "postgresql", "supabase", "mysql"] = "sqlite"
     db_uri: str = ""
     db_host: str = "localhost"
     db_port: int = 5432
@@ -90,6 +90,9 @@ class QASQLConfig:
         elif uri.startswith("postgresql://") or uri.startswith("postgres://"):
             self.db_type = "postgresql"
             self._parse_postgres_uri(uri)
+        elif uri.startswith("mysql://"):
+            self.db_type = "mysql"
+            self._parse_mysql_uri(uri)
 
     def _parse_postgres_uri(self, uri: str):
         """Parse PostgreSQL connection URI."""
@@ -115,6 +118,31 @@ class QASQLConfig:
         else:
             self.db_host = host_port
 
+    def _parse_mysql_uri(self, uri: str):
+        """Parse MySQL connection URI (mysql://user:pass@host:3306/dbname)."""
+        uri = uri.replace("mysql://", "")
+
+        if "@" in uri:
+            auth, rest = uri.split("@", 1)
+            if ":" in auth:
+                self.db_user, self.db_password = auth.split(":", 1)
+            else:
+                self.db_user = auth
+        else:
+            rest = uri
+
+        if "/" in rest:
+            host_port, self.db_name = rest.split("/", 1)
+        else:
+            host_port = rest
+
+        if ":" in host_port:
+            self.db_host, port_str = host_port.split(":", 1)
+            self.db_port = int(port_str)
+        else:
+            self.db_host = host_port
+            self.db_port = 3306
+
     def get_db_path(self) -> Path:
         """Get SQLite database file path."""
         if self.db_type != "sqlite":
@@ -135,6 +163,18 @@ class QASQLConfig:
             "schema": self.db_schema,
         }
 
+    def get_mysql_params(self) -> dict:
+        """Get MySQL connection parameters."""
+        if self.db_type != "mysql":
+            raise ValueError("get_mysql_params() only valid for MySQL")
+        return {
+            "host": self.db_host,
+            "port": self.db_port,
+            "database": self.db_name,
+            "user": self.db_user,
+            "password": self.db_password,
+        }
+
     def get_supabase_params(self) -> dict:
         """Get Supabase connection parameters."""
         if self.db_type != "supabase":
@@ -149,6 +189,8 @@ class QASQLConfig:
         """Extract database name from configuration."""
         if self.db_type == "sqlite":
             return Path(self.db_uri).stem
+        elif self.db_type == "mysql":
+            return self.db_name
         elif self.db_type == "supabase":
             # Extract project name from Supabase URL
             if self.supabase_url:
